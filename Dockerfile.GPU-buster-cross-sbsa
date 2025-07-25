@@ -1,28 +1,31 @@
 FROM debian:buster
 ARG VER="12-6"
 
-RUN dpkg --add-architecture arm64
-RUN sed -i s/deb.debian.org/archive.debian.org/g /etc/apt/sources.list; \
+ENV OMPVERSION=20.1.7
+ENV PATH=/root/.cargo/bin:$PATH
+ENV LIBOMP_AARCH64="/opt/libomp"
+
+WORKDIR /opt
+RUN dpkg --add-architecture arm64; \
+    sed -i s/deb.debian.org/archive.debian.org/g /etc/apt/sources.list; \
     sed -i s/security.debian.org/archive.debian.org/g /etc/apt/sources.list; \
     apt-get update; \
     apt-get -y install -o APT::Immediate-Configure=false \
-        git curl wget vim ninja-build crossbuild-essential-arm64 zlib1g-dev:arm64 libbz2-dev:arm64 software-properties-common
-
-RUN wget https://github.com/Kitware/CMake/releases/download/v3.31.0/cmake-3.31.0-linux-x86_64.sh; \
+        git curl wget vim ninja-build crossbuild-essential-arm64 zlib1g-dev:arm64 libbz2-dev:arm64 software-properties-common; \
+    wget https://github.com/Kitware/CMake/releases/download/v3.31.0/cmake-3.31.0-linux-x86_64.sh; \
     chmod +x cmake-3.31.0-linux-x86_64.sh; \
-    ./cmake-3.31.0-linux-x86_64.sh --skip-license --prefix=/usr/local;
-
-RUN wget -O cuda-x64.deb  https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/cuda-keyring_1.1-1_all.deb
-RUN wget -O cuda-sbsa.deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/cross-linux-sbsa/cuda-keyring_1.1-1_all.deb
-RUN dpkg -i cuda-x64.deb && dpkg -i cuda-sbsa.deb
-RUN apt-get update
-RUN apt-get install -y cuda-nvcc-${VER} cuda-nvcc-cross-sbsa-${VER} cuda-cudart-cross-sbsa-${VER} libcublas-cross-sbsa-${VER}
-
-RUN curl https://sh.rustup.rs -sSf | \
-    sh -s -- --default-toolchain stable -y
-ENV PATH=/root/.cargo/bin:$PATH
-
-RUN curl https://apt.llvm.org/llvm.sh -sSf | \
+    ./cmake-3.31.0-linux-x86_64.sh --skip-license --prefix=/usr/local; \
+    rm -f cmake-3.31.0-linux-x86_64.sh; \
+    wget -O cuda-x64.deb  https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/cuda-keyring_1.1-1_all.deb; \
+    wget -O cuda-sbsa.deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/cross-linux-sbsa/cuda-keyring_1.1-1_all.deb; \
+    dpkg -i cuda-x64.deb && dpkg -i cuda-sbsa.deb; \
+    rm -f cuda-x64.deb cuda-sbsa.deb; \
+    apt-get update; \
+    apt-get install -y cuda-nvcc-${VER} cuda-nvcc-cross-sbsa-${VER} cuda-cudart-cross-sbsa-${VER} libcublas-cross-sbsa-${VER}; \
+    rm -rf /var/lib/apt/lists/*; \
+    curl https://sh.rustup.rs -sSf | \
+        sh -s -- --default-toolchain stable -y; \
+    curl https://apt.llvm.org/llvm.sh -sSf | \
         bash -s -- 20; \
     echo "set(CMAKE_SYSTEM_NAME Linux)" > /opt/toolchain.cmake; \
     echo "set(CMAKE_SYSTEM_PROCESSOR aarch64)" >> /opt/toolchain.cmake; \
@@ -35,11 +38,8 @@ RUN curl https://apt.llvm.org/llvm.sh -sSf | \
     echo '#!/bin/sh\n/usr/bin/clang-20 --target=aarch64-linux-gnu "${@}"\n' > /opt/clang-aarch64; \
     echo '#!/bin/sh\n/usr/bin/clang++-20 --target=aarch64-linux-gnu "${@}"\n' > /opt/clang++-aarch64; \
     chmod +x /opt/clang-aarch64 /opt/clang++-aarch64; \
-    cat /opt/clang-aarch64 /opt/clang++-aarch64;
-
-ENV OMPVERSION=20.1.7
-ENV LIBOMP_AARCH64="/opt/build_libomp/openmp-${OMPVERSION}.src/build-arm64/runtime/src"
-RUN mkdir -p build_libomp && cd build_libomp; \
+    cat /opt/clang-aarch64 /opt/clang++-aarch64; \
+    mkdir -p /opt/build_libomp && cd /opt/build_libomp; \
     wget -qO- https://github.com/llvm/llvm-project/releases/download/llvmorg-${OMPVERSION}/cmake-${OMPVERSION}.src.tar.xz | tar xJvf -; \
     wget -qO- https://github.com/llvm/llvm-project/releases/download/llvmorg-${OMPVERSION}/openmp-${OMPVERSION}.src.tar.xz | tar xJvf -; \
     mv cmake-${OMPVERSION}.src cmake; \
@@ -52,4 +52,7 @@ RUN mkdir -p build_libomp && cd build_libomp; \
         -DLIBOMP_ARCH=aarch64 \
         -DCMAKE_TOOLCHAIN_FILE=/opt/toolchain.cmake \
         ..; \
-    cmake --build . -j$(nproc --all) -v;
+    cmake --build . -j$(nproc --all) -v; \
+    mkdir -p ${LIBOMP_AARCH64}; \
+    cp -r /opt/build_libomp/openmp-${OMPVERSION}.src/build-arm64/runtime/src/* ${LIBOMP_AARCH64}; \
+    rm -rf /opt/build_libomp;
