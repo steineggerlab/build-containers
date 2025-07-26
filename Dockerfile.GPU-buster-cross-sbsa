@@ -23,11 +23,8 @@ RUN dpkg --add-architecture arm64; \
     apt-get update; \
     apt-get install -y cuda-nvcc-${VER} cuda-nvcc-cross-sbsa-${VER} cuda-cudart-cross-sbsa-${VER} libcublas-cross-sbsa-${VER}; \
     rm -rf /var/lib/apt/lists/*; \
-    curl https://sh.rustup.rs -sSf | \
-        sh -s -- --default-toolchain stable -y; \
-    rustup target add \
-        x86_64-unknown-linux-gnu \
-        aarch64-unknown-linux-gnu; \
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
+      sh -s -- --profile minimal --default-host aarch64-unknown-linux-gnu -y; \
     curl https://apt.llvm.org/llvm.sh -sSf | \
         bash -s -- 20; \
     echo "set(CMAKE_SYSTEM_NAME Linux)" > /opt/toolchain.cmake; \
